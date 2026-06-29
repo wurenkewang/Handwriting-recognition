@@ -1,0 +1,14 @@
+﻿# 数据集 (超大文件，训练时下载)
+mnist_dataset/
+
+# 训练产物 (可重新生成)
+mnist_cnn.pt
+*.npy
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/

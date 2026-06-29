@@ -1,0 +1,425 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手写数字识别 - CNN</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+
+    /* 背景动画粒子 */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.15), transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.08), transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(79, 172, 254, 0.1), transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 40px 36px 32px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4), 0 0 80px rgba(79, 172, 254, 0.08) inset;
+      max-width: 520px;
+      width: 95%;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 0.02em;
+    }
+
+    .header .badge {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #a78bfa;
+      background: rgba(167, 139, 250, 0.12);
+      border: 1px solid rgba(167, 139, 250, 0.25);
+      letter-spacing: 0.04em;
+    }
+
+    .canvas-wrapper {
+      background: #1a1a2e;
+      border-radius: 16px;
+      padding: 8px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      margin-bottom: 20px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      border-radius: 10px;
+      background: #0d0d1a;
+      cursor: crosshair;
+      image-rendering: auto;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      flex: 1;
+      min-width: 100px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      letter-spacing: 0.02em;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent, rgba(255,255,255,0.08), transparent);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .btn:hover::after { opacity: 1; }
+
+    .btn-clear {
+      background: rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .btn-clear:hover {
+      background: rgba(255, 255, 255, 0.14);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    .btn-clear:active { transform: scale(0.97); }
+
+    .btn-predict {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+    }
+    .btn-predict:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(99, 102, 241, 0.5);
+    }
+    .btn-predict:active { transform: scale(0.97); }
+    .btn-predict:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .result-area {
+      text-align: center;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .result-digit {
+      font-size: 4.5rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #34d399, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .result-label {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.4); opacity: 0; }
+      70% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #8b5cf6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 12px auto;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hint-text {
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.35);
+      margin-top: 10px;
+    }
+
+    /* 响应式 */
+    @media (max-width: 480px) {
+      .container { padding: 24px 16px 20px; }
+      .header h1 { font-size: 1.4rem; }
+      .btn { padding: 10px 14px; font-size: 0.85rem; }
+      .result-digit { font-size: 3.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>手写数字识别</h1>
+      <span class="badge">CNN · 99%+ 准确率</span>
+    </div>
+
+    <div class="canvas-wrapper">
+      <canvas id="drawingCanvas" width="400" height="400"></canvas>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-clear" id="clearButton">🗑️ 清空</button>
+      <button class="btn btn-predict" id="sendButton">✨ 识别</button>
+    </div>
+
+    <div class="result-area" id="resultArea">
+      <p class="hint-text">在画布上写一个数字，然后点击识别</p>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("drawingCanvas");
+    const ctx = canvas.getContext("2d");
+    const clearButton = document.getElementById("clearButton");
+    const sendButton = document.getElementById("sendButton");
+    const resultArea = document.getElementById("resultArea");
+
+    let drawing = false;
+    let lastX = 0, lastY = 0;
+
+    // 初始化画布
+    function initCanvas() {
+      ctx.fillStyle = "#0d0d1a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 18;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#e2e8f0";
+    }
+    initCanvas();
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return { x: e.offsetX * scaleX, y: e.offsetY * scaleY };
+    }
+
+    function startDrawing(e) {
+      drawing = true;
+      const pos = getPos(e);
+      [lastX, lastY] = [pos.x, pos.y];
+    }
+
+    function draw(e) {
+      if (!drawing) return;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.quadraticCurveTo((lastX + pos.x) / 2, (lastY + pos.y) / 2, pos.x, pos.y);
+      ctx.stroke();
+      [lastX, lastY] = [pos.x, pos.y];
+    }
+
+    function stopDrawing() { drawing = false; }
+
+    // 鼠标事件
+    canvas.addEventListener("mousedown", startDrawing);
+    canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("mouseup", stopDrawing);
+    canvas.addEventListener("mouseleave", stopDrawing);
+
+    // 触摸事件
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      lastX = (e.touches[0].clientX - rect.left) * scaleX;
+      lastY = (e.touches[0].clientY - rect.top) * scaleY;
+      drawing = true;
+    });
+    canvas.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (!drawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.touches[0].clientX - rect.left) * scaleX;
+      const y = (e.touches[0].clientY - rect.top) * scaleY;
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.quadraticCurveTo((lastX + x) / 2, (lastY + y) / 2, x, y);
+      ctx.stroke();
+      [lastX, lastY] = [x, y];
+    });
+    canvas.addEventListener("touchend", stopDrawing);
+
+    // 清空画布
+    clearButton.addEventListener("click", () => {
+      initCanvas();
+      resultArea.innerHTML = '<p class="hint-text">在画布上写一个数字，然后点击识别</p>';
+    });
+
+    // 获取最小边界框
+    function getBoundingBox(imageData) {
+      const { width, height, data } = imageData;
+      let top = height, bottom = 0, left = width, right = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+          if (r > 80 || g > 80 || b > 80) {
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+          }
+        }
+      }
+      return { top, bottom, left, right };
+    }
+
+    // 预处理图像 -> 784 灰度数组 (黑底白字)
+    function preprocessImage() {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const { top, bottom, left, right } = getBoundingBox(imageData);
+
+      if (top === canvas.height || left === canvas.width) return null;
+
+      const cropW = right - left + 1;
+      const cropH = bottom - top + 1;
+
+      // 裁剪
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      const cropCtx = cropCanvas.getContext("2d");
+      cropCtx.putImageData(imageData, -left, -top, left, top, cropW, cropH);
+
+      // 缩放到 28x28 (保持比例居中)
+      const pad = 4; // 留白
+      const scale = Math.min((28 - pad * 2) / cropW, (28 - pad * 2) / cropH);
+      const scaledW = Math.round(cropW * scale);
+      const scaledH = Math.round(cropH * scale);
+      const offsetX = Math.floor((28 - scaledW) / 2);
+      const offsetY = Math.floor((28 - scaledH) / 2);
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = 28;
+      tempCanvas.height = 28;
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCtx.fillStyle = "#0d0d1a";
+      tempCtx.fillRect(0, 0, 28, 28);
+      tempCtx.drawImage(cropCanvas, offsetX, offsetY, scaledW, scaledH);
+
+      const processed = tempCtx.getImageData(0, 0, 28, 28);
+      const grayData = [];
+      for (let i = 0; i < processed.data.length; i += 4) {
+        const r = processed.data[i], g = processed.data[i + 1], b = processed.data[i + 2];
+        const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+        grayData.push(Math.max(0, gray - 13)); // 黑底(约13)变0，白字光亮
+      }
+      return grayData;
+    }
+
+    // 发送到服务器
+    sendButton.addEventListener("click", () => {
+      const grayData = preprocessImage();
+      if (!grayData) {
+        resultArea.innerHTML = '<p class="hint-text" style="color:#f87171;">请先在画布上写一个数字</p>';
+        return;
+      }
+
+      // 显示 loading
+      resultArea.innerHTML = '<div class="spinner"></div><p class="hint-text">正在识别...</p>';
+      sendButton.disabled = true;
+
+      const socket = new WebSocket("ws://localhost:8080/ws");
+      socket.onopen = () => socket.send(JSON.stringify({ image: grayData }));
+
+      socket.onmessage = (event) => {
+        const response = JSON.parse(event.data);
+        if (response.error) {
+          resultArea.innerHTML = `<p class="hint-text" style="color:#f87171;">错误: ${response.error}</p>`;
+        } else {
+          resultArea.innerHTML = `
+            <div class="result-digit">${response.prediction}</div>
+            <div class="result-label">PREDICTED DIGIT</div>
+          `;
+        }
+        socket.close();
+        sendButton.disabled = false;
+      };
+
+      socket.onerror = () => {
+        resultArea.innerHTML = '<p class="hint-text" style="color:#f87171;">连接失败，请确认服务器已启动</p>';
+        sendButton.disabled = false;
+      };
+    });
+
+    // 键盘快捷键
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendButton.click();
+      if (e.key === "c" && e.ctrlKey) { e.preventDefault(); clearButton.click(); }
+    });
+  </script>
+</body>
+</html>
